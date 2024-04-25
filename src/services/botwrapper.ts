@@ -93,7 +93,9 @@ export class BotWrapper {
   static async processWebhook(req, res) {
     try {
       const { body } = req;
-
+      if (body?.conversation?.meta?.sender?.phone_number) {
+        return res.end();
+      }
       if (
         body.content_type === "input_csat" &&
         body.content_attributes?.submitted_values?.csat_survey_response
@@ -143,17 +145,17 @@ export class BotWrapper {
       res.end("Evento del agente procesado.");
     } catch (error) {
       console.error("Error al procesar el webhook:", error);
-      res.status(500).send("Error al procesar el webhook.");
+      res.end("Error al procesar el webhook.");
     }
   }
 
   static async SetupBotListeners(PORT: number) {
-    await this.BotInstance.httpServer(+PORT);
-
     await this.BotInstance.provider.server.post(
       "/webhook",
       this.processWebhook.bind(this)
     );
+
+    await this.BotInstance.httpServer(+PORT);
 
     this.BotInstance.provider.on("require_action", async () => {
       //espere unos segundos antes de enviar la respuesta
@@ -174,7 +176,10 @@ export class BotWrapper {
     });
 
     this.BotInstance.provider.on("ready", async (data) => {
-      if (!data) return;
+      if (!data) {
+        return;
+      }
+
       return await this.Chatwoot.sendMessage(
         "593999999999",
         `🔥EL CHATBOT ESTA LISTO PARA INTERACTUAR🔥`,
