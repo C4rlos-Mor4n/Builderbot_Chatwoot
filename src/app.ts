@@ -1,5 +1,3 @@
-import dotenv from "dotenv";
-dotenv.config();
 import {
   createBot,
   createProvider,
@@ -11,6 +9,8 @@ import { MemoryDB as Database } from "@builderbot/bot";
 import { BaileysProvider as Provider } from "@builderbot/provider-baileys";
 import { BotWrapper } from "./services/botwrapper";
 import { join } from "path";
+import dotenv from "dotenv";
+dotenv.config();
 
 const fullSamplesFlow = addKeyword(["Prueba", utils.setEvent("SAMPLES")])
   .addAnswer("Esto es un texto")

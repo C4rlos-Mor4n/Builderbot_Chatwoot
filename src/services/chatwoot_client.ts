@@ -49,13 +49,19 @@ class Chatwoot_Client {
    */
   private async _enqueueRequest(
     endpoint: string,
-    options: AxiosRequestConfig = {
-      headers: {},
-    }
+    options: AxiosRequestConfig = {}
   ): Promise<any> {
     return new Promise((resolve, reject) => {
       Chatwoot_Client.queue.enqueue(async () => {
         try {
+          console.log("Enviando solicitud a Chatwoot:", endpoint, options);
+          console.log(
+            this.CHATWOOT_URL,
+            this.CHATWOOT_ID,
+            this.CHATWOOT_API_ACCESS_TOKEN,
+            this.CHATWOOT_INBOX_ID
+          );
+
           const response: AxiosResponse = await axios({
             ...options,
             url: `${this.CHATWOOT_URL}/${this.CHATWOOT_ID}${endpoint}`,
@@ -88,7 +94,7 @@ class Chatwoot_Client {
     endpoint: string,
     options?: AxiosRequestConfig
   ): Promise<any> {
-    return this._enqueueRequest(endpoint, options);
+    return await this._enqueueRequest(endpoint, options);
   }
 
   /**
@@ -290,14 +296,11 @@ class Chatwoot_Client {
 
     const getAttributes = await this.getAttributes(userPhone);
     if (!getAttributes) {
-      console.log("entrando al if");
       const assignee = await this.setAttributes(
         userPhone,
         "funciones_del_bot",
         "ON"
       );
-
-      console.log("Assignee:", assignee);
 
       if (!assignee) {
         throw new Error("Error al crear el atributo personalizado");
@@ -433,9 +436,6 @@ class Chatwoot_Client {
       message_type: TypeUser,
       private: isPrivate,
     };
-
-    console.log("Sending message:", data);
-
     await this._request(`/conversations/${conversationID}/messages`, {
       method: "POST",
       data: data,

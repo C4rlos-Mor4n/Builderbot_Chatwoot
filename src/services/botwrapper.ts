@@ -66,8 +66,6 @@ export class BotWrapper {
   }) {
     const { private: isPrivate, event, message_type, conversation } = data;
 
-    console.log("Evento del agente recibido:", data);
-
     if (
       !isPrivate &&
       event === "message_created" &&
@@ -94,10 +92,7 @@ export class BotWrapper {
 
   static async processWebhook(req, res) {
     try {
-      console.log("Evento del agente recibido:", req.body);
       const { body } = req;
-
-      console.log("Evento del agente recibido:", body);
 
       if (
         body.content_type === "input_csat" &&
@@ -112,12 +107,6 @@ export class BotWrapper {
       const content = body?.content;
 
       if (content) {
-        console.log(
-          "Mensaje de calificación:",
-          content,
-          "Número del usuario:",
-          phone
-        );
         await this.BotInstance.provider.sendText(phone, content);
       }
 
@@ -159,11 +148,12 @@ export class BotWrapper {
   }
 
   static async SetupBotListeners(PORT: number) {
+    await this.BotInstance.httpServer(+PORT);
+
     await this.BotInstance.provider.server.post(
       "/webhook",
       this.processWebhook.bind(this)
     );
-    await this.BotInstance.httpServer(+PORT);
 
     this.BotInstance.provider.on("require_action", async () => {
       //espere unos segundos antes de enviar la respuesta
