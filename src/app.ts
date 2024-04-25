@@ -1,3 +1,4 @@
+import "dotenv/config";
 import {
   createBot,
   createProvider,
@@ -9,21 +10,8 @@ import { MemoryDB as Database } from "@builderbot/bot";
 import { BaileysProvider as Provider } from "@builderbot/provider-baileys";
 import { BotWrapper } from "./services/botwrapper";
 import { join } from "path";
-import dotenv from "dotenv";
-dotenv.config();
 
 const fullSamplesFlow = addKeyword(["Prueba", utils.setEvent("SAMPLES")])
-  .addAnswer("Esto es un texto")
-  .addAnswer(`Send Image A`, { media: "https://i.imgur.com/AsvWfUX.png" })
-  .addAction(async (ctx, { flowDynamic }) => {
-    await flowDynamic(`Welcome ${ctx.name}`);
-    await flowDynamic([
-      {
-        body: "Send Image B",
-        media: "https://i.imgur.com/w0RtKnN.png",
-      },
-    ]);
-  })
   .addAnswer(`Send image from Local`, {
     media: join(process.cwd(), "assets", "sample.png"),
   })

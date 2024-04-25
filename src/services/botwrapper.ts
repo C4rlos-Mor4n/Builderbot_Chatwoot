@@ -11,12 +11,6 @@ export class BotWrapper {
     start: true,
   });
 
-  static queueAgent = new Queue({
-    concurrent: 1,
-    interval: 200,
-    start: true,
-  });
-
   static async init(
     _bot: any,
     _options: {
@@ -40,9 +34,9 @@ export class BotWrapper {
     }
 
     this.BotInstance = _bot;
-    this.Chatwoot = new Chatwoot_Client(_options, this.BotInstance.provider);
-    await this.checkAndCreateAttribute();
-    await this.SetupBotListeners(_options.PORT);
+    this.Chatwoot = new Chatwoot_Client(_options);
+    this.checkAndCreateAttribute();
+    this.SetupBotListeners(_options.PORT);
   }
 
   static async checkAndCreateAttribute() {
@@ -72,20 +66,41 @@ export class BotWrapper {
 
       if (data.attachments && data.attachments.length > 0) {
         const fileType = data.attachments[0].file_type;
-        switch (fileType) {
-          case "image":
-          case "video":
-          case "file":
-          case "audio":
-            await this.BotInstance.provider.sendMedia(
-              `${phone}@c.us`,
-              mediaUrl,
-              content
-            );
-            break;
+
+        if (fileType === "image") {
+          return await this.BotInstance.provider.sendMedia(
+            `${phone}@c.us`,
+            mediaUrl,
+            content
+          );
+        }
+
+        if (fileType === "video") {
+          return await this.BotInstance.provider.sendMedia(
+            `${phone}@c.us`,
+            mediaUrl,
+            content
+          );
+        }
+        if (fileType === "audio") {
+          return await this.BotInstance.provider.sendMedia(
+            `${phone}@c.us`,
+            mediaUrl,
+            content
+          );
+        }
+        if (fileType === "file") {
+          return await this.BotInstance.provider.sendMedia(
+            `${phone}@c.us`,
+            mediaUrl,
+            content
+          );
         }
       } else {
-        await this.BotInstance.provider.sendText(`${phone}@c.us`, content);
+        return await this.BotInstance.provider.sendText(
+          `${phone}@c.us`,
+          content
+        );
       }
     }
   }
@@ -108,16 +123,21 @@ export class BotWrapper {
           ""
         );
 
-        await this.BotInstance.provider.sendText(
+        return this.BotInstance.provider.sendText(
           `${number}@c.us`,
           MensajeCalificacion
         );
       }
+      let funcionesDelBot;
 
-      const funcionesDelBot =
-        body.custom_attributes?.funciones_del_bot ||
-        body.sender?.custom_attributes?.funciones_del_bot ||
-        body.conversation?.meta?.sender?.custom_attributes?.funciones_del_bot;
+      if (body.custom_attributes?.funciones_del_bot) {
+        funcionesDelBot = body.custom_attributes.funciones_del_bot;
+      } else if (body.sender?.custom_attributes?.funciones_del_bot) {
+        funcionesDelBot = body.sender.custom_attributes.funciones_del_bot;
+      } else {
+        funcionesDelBot =
+          body.conversation?.meta?.sender?.custom_attributes?.funciones_del_bot;
+      }
 
       const getBlacklistSnapshot =
         await this.BotInstance.dynamicBlacklist.getList();
@@ -138,9 +158,9 @@ export class BotWrapper {
         await this.BotInstance.dynamicBlacklist.add(numberOrId);
       }
 
-      if (body.event === "message_created" && body.created_at) {
-        this.queueAgent.enqueue(async () => {
-          await this.processOutgoingMessageAgent(body);
+      if (body.event === "message_created") {
+        this.queue.enqueue(async () => {
+          return await this.processOutgoingMessageAgent(body);
         });
       }
 
@@ -182,7 +202,7 @@ export class BotWrapper {
       if (!data) {
         return;
       }
-
+      await new Promise((resolve) => setTimeout(resolve, 3000));
       return await this.Chatwoot.sendMessage(
         "593999999999",
         `🔥EL CHATBOT ESTA LISTO PARA INTERACTUAR🔥`,
@@ -194,13 +214,13 @@ export class BotWrapper {
 
     this.BotInstance.provider.on("message", (message: any) => {
       this.queue.enqueue(async () => {
-        return this.processIncomingMessage(message);
+        return await this.processIncomingMessage(message);
       });
     });
 
     this.BotInstance.on("send_message", (message: any) => {
       this.queue.enqueue(async () => {
-        return this.processOutgoingMessage(message);
+        return await this.processOutgoingMessage(message);
       });
     });
   }

@@ -1,7 +1,6 @@
 import axios, { AxiosRequestConfig, AxiosResponse } from "axios";
 import Queue from "queue-promise";
 import FormData from "form-data";
-import tmp from "tmp";
 import fs from "fs";
 import {
   Contact,
@@ -19,6 +18,7 @@ class Chatwoot_Client {
   private CHATWOOT_API_ACCESS_TOKEN: string;
   private CHATWOOT_INBOX_ID: number;
   private provider: any;
+  static locks = {};
   static queue = new Queue({
     concurrent: 1,
     interval: 200,
@@ -292,31 +292,37 @@ class Chatwoot_Client {
     let userID = await this.getUserID(userPhone);
     if (!userID) {
       userID = await this.createContact(name, userPhone);
-    }
-
-    const getAttributes = await this.getAttributes(userPhone);
-    if (!getAttributes) {
-      const assignee = await this.setAttributes(
-        userPhone,
-        "funciones_del_bot",
-        "ON"
-      );
-
-      if (!assignee) {
-        throw new Error("Error al crear el atributo personalizado");
+      await new Promise((r) => setTimeout(r, 100));
+      const getAttributes = await this.getAttributes(userPhone);
+      if (!getAttributes) {
+        const result = await this.setAttributes(
+          userPhone,
+          "funciones_del_bot",
+          "On"
+        );
+        if (result) {
+          console.log("Atributo actualizado con éxito.");
+        }
       }
     }
 
-    let conversationID = await this.getConversationID(userID as number);
-    if (!conversationID) {
-      const source_id = `whatsapp:${userPhone}`;
-      conversationID = await this.createNewConversation(
-        source_id,
-        userID as number
-      );
-    }
+    let conversation_id = await this.getConversationID(userID);
+    if (!conversation_id) {
+      // Adquiere el bloqueo
+      if (Chatwoot_Client.locks[userPhone]) {
+        while (Chatwoot_Client.locks[userPhone]) {
+          await new Promise((r) => setTimeout(r, 100));
+        }
+        conversation_id = await this.getConversationID(userID);
+      } else {
+        Chatwoot_Client.locks[userPhone] = true;
 
-    return conversationID;
+        const sourceID = `ChatBot ${userPhone}`; // Aquí, debes decidir cómo determinar el 'sourceID'. Podría ser el userID u otro valor único.
+        conversation_id = await this.createNewConversation(sourceID, userID);
+        Chatwoot_Client.locks[userPhone] = false;
+      }
+    }
+    return conversation_id;
   }
 
   /**
@@ -327,7 +333,6 @@ class Chatwoot_Client {
    * @returns Una promesa que se resuelve cuando se han manejado los datos de los medios.
    */
   async handleMediaData(MediaData: MediaData, form: FormData): Promise<void> {
-    const tmpobj = tmp.dirSync({ unsafeCleanup: true });
     try {
       for (const typeKey in MediaData.message) {
         const mediaType = MediaData.message[typeKey];
@@ -337,12 +342,13 @@ class Chatwoot_Client {
         const { caption, mimetype, filename } = mediaType;
 
         // Suponiendo que saveFile devuelve la ruta del archivo guardado
-        const filePath = await this.provider.saveFile(MediaData, tmpobj.name);
+        const filePath = await this.provider.saveFile(MediaData);
         const safeFilename = filename || `file.${mimetype.split("/")[1]}`;
 
+        const stream = await fs.createReadStream(filePath);
         // Asegurarse de que el archivo existe antes de intentar usarlo
         if (fs.existsSync(filePath)) {
-          form.append("attachments[]", fs.createReadStream(filePath), {
+          form.append("attachments[]", stream, {
             filename: safeFilename,
             contentType: mimetype,
           });
@@ -356,8 +362,6 @@ class Chatwoot_Client {
       }
     } catch (error) {
       console.error("Error handling media data:", error);
-    } finally {
-      tmpobj.removeCallback(); // Asegúrate de limpiar incluso si hay un error
     }
   }
 
@@ -391,24 +395,44 @@ class Chatwoot_Client {
    */
   async handleURLMedia(url: string, form: FormData): Promise<void> {
     try {
-      if (url.includes("http") || url.includes("https")) {
+      if (url.startsWith("http://") || url.startsWith("https://")) {
         const { data, contentType } = await this._downloadMedia(url);
         if (data && contentType) {
-          const fileExtension = contentType.split("/")[1];
-          const fileName = `file.${fileExtension}`;
-          form.append("attachments[]", data, fileName);
+          const fileName = this.extractFileName(url, contentType);
+          console.log("File name:", fileName);
+          form.append("attachments[]", data, {
+            filename: fileName,
+          });
         } else {
-          console.log("Failed to download or invalid content type", url);
+          console.error("Failed to download or invalid content type:", url);
         }
+      } else if (fs.existsSync(url)) {
+        const fileName = url.substring(url.lastIndexOf("/"));
+        const stream = fs.createReadStream(url);
+        form.append("attachments[]", stream, {
+          filename: fileName,
+        });
       } else {
-        if (fs.existsSync(url)) {
-          const fileExtension = url.split(".").pop();
-          const fileName = `file.${fileExtension}`;
-          form.append("attachments[]", fs.createReadStream(url), fileName);
-        }
+        console.warn(
+          "The URL does not start with http or https and is not a valid file path:",
+          url
+        );
       }
     } catch (error) {
       console.error("Error handling URL media:", error);
+    }
+  }
+
+  private extractFileName(url: string, contentType: string): string {
+    // Extracts a file name from the URL or creates a generic one based on content type
+    const urlParts = url.split("/");
+    const lastSegment = urlParts[urlParts.length - 1];
+    if (lastSegment && lastSegment.includes(".")) {
+      return lastSegment; // Use the original file name if present
+    } else {
+      // Create a generic file name if URL does not include one
+      const extension = contentType.split("/")[1] || "bin"; // Default to 'bin' if no extension is detectable
+      return `file.${extension}`;
     }
   }
 
@@ -436,12 +460,10 @@ class Chatwoot_Client {
       message_type: TypeUser,
       private: isPrivate,
     };
-    await this._request(`/conversations/${conversationID}/messages`, {
+    return await this._request(`/conversations/${conversationID}/messages`, {
       method: "POST",
       data: data,
     });
-
-    return true;
   }
 
   /**
@@ -474,15 +496,19 @@ class Chatwoot_Client {
         form.append("content", message);
       }
 
-      if (MediaData) await this.handleMediaData(MediaData, form);
-      if (media) await this.handleURLMedia(media, form);
+      if (MediaData) {
+        await this.handleMediaData(MediaData, form);
+      }
+      if (media) {
+        await this.handleURLMedia(media, form);
+      }
 
       form.append("message_type", TypeUser);
       form.append("private", isPrivate.toString());
 
       if (name) form.append("name", name);
 
-      await this._request(`/conversations/${conversationID}/messages`, {
+      return await this._request(`/conversations/${conversationID}/messages`, {
         method: "POST",
         headers: {
           ...form.getHeaders(),
@@ -490,8 +516,6 @@ class Chatwoot_Client {
         },
         data: form,
       });
-
-      return true;
     } catch (error) {
       console.error(
         "Failed to send message:",
