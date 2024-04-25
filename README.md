@@ -18,6 +18,8 @@
 
 ## Getting Started
 
+Con esta biblioteca, puede crear flujos de conversación automatizados independientes del proveedor de WhatsApp, configurar respuestas automáticas para preguntas frecuentes, recibir y responder mensajes automáticamente y realizar un seguimiento de las interacciones con los clientes. Además, puede configurar fácilmente activadores para ampliar las funcionalidades de forma ilimitada.
+
 ## Scripts
 
 ### `npm start`
