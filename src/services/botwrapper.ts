@@ -56,36 +56,36 @@ export class BotWrapper {
     }
   }
 
-  static async processOutgoingMessageAgent(data: {
-    content?: any;
-    attachments?: any;
-    private?: any;
-    event?: any;
-    message_type?: any;
-    conversation?: any;
-  }) {
-    const { private: isPrivate, event, message_type, conversation } = data;
+  static async processOutgoingMessageAgent(data: any) {
+    const createOutGoing =
+      data?.private == false &&
+      data?.event == "message_created" &&
+      data?.message_type === "outgoing" &&
+      data?.conversation?.channel.includes("Channel::Api");
+    if (createOutGoing) {
+      const phone = data?.conversation?.meta?.sender?.phone_number.replace(
+        "+",
+        ""
+      );
+      const content = data?.content ?? "";
+      const mediaUrl = data?.attachments?.[0]?.data_url;
 
-    if (
-      !isPrivate &&
-      event === "message_created" &&
-      message_type === "outgoing" &&
-      conversation?.channel.includes("Channel::Api")
-    ) {
-      const phone =
-        conversation?.meta?.sender?.phone_number.replace("+", "") + "@c.us";
-      const content = data.content ?? "";
-      const attachments = data.attachments || [];
-
-      if (attachments.length > 0) {
-        const { file_type, data_url } = attachments[0];
-        if (["image", "video", "file", "audio"].includes(file_type)) {
-          await this.BotInstance.provider.sendMedia(phone, data_url, content);
-        } else {
-          console.log("Unsupported file type:", file_type);
+      if (data.attachments && data.attachments.length > 0) {
+        const fileType = data.attachments[0].file_type;
+        switch (fileType) {
+          case "image":
+          case "video":
+          case "file":
+          case "audio":
+            await this.BotInstance.provider.sendMedia(
+              `${phone}@c.us`,
+              mediaUrl,
+              content
+            );
+            break;
         }
       } else {
-        await this.BotInstance.provider.sendText(phone, content);
+        await this.BotInstance.provider.sendText(`${phone}@c.us`, content);
       }
     }
   }
@@ -93,23 +93,25 @@ export class BotWrapper {
   static async processWebhook(req, res) {
     try {
       const { body } = req;
-      if (body?.conversation?.meta?.sender?.phone_number) {
-        return res.end();
-      }
-      if (
-        body.content_type === "input_csat" &&
-        body.content_attributes?.submitted_values?.csat_survey_response
-      ) {
+      if (body?.conversation?.meta?.sender?.phone_number === "+593999999999") {
         return res.end();
       }
 
-      const phone =
-        body?.conversation?.meta?.sender?.phone_number.replace(/^\+/, "") +
-        "@c.us";
-      const content = body?.content;
+      if (body.content_type === "input_csat") {
+        if (body.content_attributes?.submitted_values?.csat_survey_response) {
+          return "";
+        }
 
-      if (content) {
-        await this.BotInstance.provider.sendText(phone, content);
+        const MensajeCalificacion = await body?.content;
+        const number = body?.conversation?.meta?.sender?.phone_number.replace(
+          /^\+/,
+          ""
+        );
+
+        await this.BotInstance.provider.sendText(
+          `${number}@c.us`,
+          MensajeCalificacion
+        );
       }
 
       const funcionesDelBot =
@@ -136,13 +138,14 @@ export class BotWrapper {
         await this.BotInstance.dynamicBlacklist.add(numberOrId);
       }
 
-      if (body.event === "message_created") {
+      if (body.event === "message_created" && body.created_at) {
         this.queueAgent.enqueue(async () => {
           await this.processOutgoingMessageAgent(body);
         });
       }
 
       res.end("Evento del agente procesado.");
+      return;
     } catch (error) {
       console.error("Error al procesar el webhook:", error);
       res.end("Error al procesar el webhook.");
