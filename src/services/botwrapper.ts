@@ -1,11 +1,18 @@
 import { Chatwoot_Client } from "./chatwoot_client";
 import Queue from "queue-promise";
 import { join } from "path";
+import _ from "lodash";
 
 export class BotWrapper {
   static BotInstance = null;
   static Chatwoot = null;
-  static queue = new Queue({
+  static queueMessage = new Queue({
+    concurrent: 1,
+    interval: 200,
+    start: true,
+  });
+
+  static QueueAgent = new Queue({
     concurrent: 1,
     interval: 200,
     start: true,
@@ -104,72 +111,87 @@ export class BotWrapper {
       }
     }
   }
-
   static async processWebhook(req, res) {
     try {
       const { body } = req;
+
+      // Early exit for a specific phone number
       if (body?.conversation?.meta?.sender?.phone_number === "+593999999999") {
-        return res.end();
+        return res.end("ok");
       }
 
+      // Handle CSAT input type
       if (body.content_type === "input_csat") {
-        if (body.content_attributes?.submitted_values?.csat_survey_response) {
-          return "";
+        return this.handleCSATInput(body, res);
+      }
+
+      // Process bot functions if specified
+      if (this.isBotFunctionEnabled(body)) {
+        await this.processBotFunctions(body, res);
+      } else {
+        // Handle other types of events like message creation
+        if (body.event === "message_created") {
+          this.QueueAgent.enqueue(() => this.processOutgoingMessageAgent(body));
         }
 
-        const MensajeCalificacion = await body?.content;
-        const number = body?.conversation?.meta?.sender?.phone_number.replace(
-          /^\+/,
-          ""
-        );
-
-        return this.BotInstance.provider.sendText(
-          `${number}@c.us`,
-          MensajeCalificacion
-        );
+        res.end("ok");
       }
-      let funcionesDelBot;
-
-      if (body.custom_attributes?.funciones_del_bot) {
-        funcionesDelBot = body.custom_attributes.funciones_del_bot;
-      } else if (body.sender?.custom_attributes?.funciones_del_bot) {
-        funcionesDelBot = body.sender.custom_attributes.funciones_del_bot;
-      } else {
-        funcionesDelBot =
-          body.conversation?.meta?.sender?.custom_attributes?.funciones_del_bot;
-      }
-
-      const getBlacklistSnapshot =
-        await this.BotInstance.dynamicBlacklist.getList();
-      const numberOrId =
-        body.event === "contact_updated" && body.phone_number
-          ? body.phone_number.replace(/^\+/, "")
-          : "";
-
-      if (
-        funcionesDelBot === "ON" &&
-        getBlacklistSnapshot.includes(numberOrId)
-      ) {
-        await this.BotInstance.dynamicBlacklist.remove(numberOrId);
-      } else if (
-        funcionesDelBot === "OFF" &&
-        !getBlacklistSnapshot.includes(numberOrId)
-      ) {
-        await this.BotInstance.dynamicBlacklist.add(numberOrId);
-      }
-
-      if (body.event === "message_created") {
-        this.queue.enqueue(async () => {
-          return await this.processOutgoingMessageAgent(body);
-        });
-      }
-
-      res.end("Evento del agente procesado.");
-      return;
     } catch (error) {
       console.error("Error al procesar el webhook:", error);
-      res.end("Error al procesar el webhook.");
+      res.send("Error al procesar el webhook.");
     }
+  }
+
+  // Handle Customer Satisfaction Score (CSAT) Input
+  static async handleCSATInput(body, res) {
+    if (body.content_attributes?.submitted_values?.csat_survey_response) {
+      return res.end("ok");
+    }
+
+    const messageRating = body?.content;
+    const number = body?.conversation?.meta?.sender?.phone_number.replace(
+      /^\+/,
+      ""
+    );
+    await this.BotInstance.provider.sendText(`${number}@c.us`, messageRating);
+
+    return res.end("ok");
+  }
+
+  // Check if bot functions are enabled
+  static isBotFunctionEnabled(body) {
+    const functionsAttrPaths = [
+      "custom_attributes.funciones_del_bot",
+      "sender.custom_attributes.funciones_del_bot",
+      "conversation.meta.sender.custom_attributes.funciones_del_bot",
+    ];
+
+    return functionsAttrPaths.some((path) => _.get(body, path) === "ON");
+  }
+
+  // Process bot functions based on blacklisting
+  static async processBotFunctions(body, res) {
+    const getBlacklistSnapshot =
+      await this.BotInstance.dynamicBlacklist.getList();
+    const numberOrId = this.getNumberOrIdFromBody(body);
+
+    if (getBlacklistSnapshot.includes(numberOrId)) {
+      console.log("Removing from blacklist:", numberOrId);
+      await this.BotInstance.dynamicBlacklist.remove(numberOrId);
+    } else {
+      console.log("Adding to blacklist:", numberOrId);
+      await this.BotInstance.dynamicBlacklist.add(numberOrId);
+    }
+
+    return res.end("ok");
+  }
+
+  // Helper function to extract number or ID
+  static getNumberOrIdFromBody(body) {
+    if (body.event === "contact_updated" && body.phone_number) {
+      return body.phone_number.replace(/^\+/, "");
+    }
+    return "";
   }
 
   static async SetupBotListeners(PORT: number) {
@@ -213,13 +235,13 @@ export class BotWrapper {
     });
 
     this.BotInstance.provider.on("message", (message: any) => {
-      this.queue.enqueue(async () => {
+      this.queueMessage.enqueue(async () => {
         return await this.processIncomingMessage(message);
       });
     });
 
     this.BotInstance.on("send_message", (message: any) => {
-      this.queue.enqueue(async () => {
+      this.queueMessage.enqueue(async () => {
         return await this.processOutgoingMessage(message);
       });
     });

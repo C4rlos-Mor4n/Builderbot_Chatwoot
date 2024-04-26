@@ -38,8 +38,6 @@ const main = async () => {
     database: adapterDB,
   });
 
-  BOT.provider
-
   await BotWrapper.init(BOT, {
     PORT: parseInt(process.env.PORT ?? "3008"),
     CHATWOOT_URL: process.env.CHATWOOT_URL, // example: http://127.0.0.1:3000/api/v1/accounts

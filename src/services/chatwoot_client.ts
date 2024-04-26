@@ -341,14 +341,10 @@ class Chatwoot_Client {
         }
         const { caption, mimetype, filename } = mediaType;
 
-        // Suponiendo que saveFile devuelve la ruta del archivo guardado
         const filePath = await this.provider.saveFile(MediaData);
-        console.log("File path:", filePath);
         const safeFilename = filename || `file.${mimetype.split("/")[1]}`;
-
-        const stream = await fs.createReadStream(filePath);
-        // Asegurarse de que el archivo existe antes de intentar usarlo
         if (fs.existsSync(filePath)) {
+          const stream = await fs.createReadStream(filePath);
           form.append("attachments[]", stream, {
             filename: safeFilename,
             contentType: mimetype,
@@ -396,17 +392,12 @@ class Chatwoot_Client {
    */
   async handleURLMedia(url: string, form: FormData): Promise<void> {
     try {
-      if (url.startsWith("http://") || url.startsWith("https://")) {
+      if (url.includes("http://") || url.includes("https://")) {
         const { data, contentType } = await this._downloadMedia(url);
-        if (data && contentType) {
-          const fileName = this.extractFileName(url, contentType);
-          console.log("File name:", fileName);
-          form.append("attachments[]", data, {
-            filename: fileName,
-          });
-        } else {
-          console.error("Failed to download or invalid content type:", url);
-        }
+        const fileName = this.extractFileName(url, contentType);
+        form.append("attachments[]", data, {
+          filename: fileName,
+        });
       } else if (fs.existsSync(url)) {
         const fileName = url.substring(url.lastIndexOf("/"));
         const stream = fs.createReadStream(url);
