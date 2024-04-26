@@ -343,6 +343,7 @@ class Chatwoot_Client {
 
         // Suponiendo que saveFile devuelve la ruta del archivo guardado
         const filePath = await this.provider.saveFile(MediaData);
+        console.log("File path:", filePath);
         const safeFilename = filename || `file.${mimetype.split("/")[1]}`;
 
         const stream = await fs.createReadStream(filePath);

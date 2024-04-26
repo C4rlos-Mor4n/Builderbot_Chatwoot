@@ -34,7 +34,7 @@ export class BotWrapper {
     }
 
     this.BotInstance = _bot;
-    this.Chatwoot = new Chatwoot_Client(_options);
+    this.Chatwoot = new Chatwoot_Client(_options, this.BotInstance.provider);
     this.checkAndCreateAttribute();
     this.SetupBotListeners(_options.PORT);
   }
