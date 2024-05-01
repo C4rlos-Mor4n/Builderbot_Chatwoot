@@ -298,7 +298,7 @@ class Chatwoot_Client {
         const result = await this.setAttributes(
           userPhone,
           "funciones_del_bot",
-          "ON"
+          "OFF"
         );
         if (result) {
           console.log("Atributo actualizado con éxito.");
