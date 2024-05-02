@@ -12,7 +12,7 @@ import { BotWrapper } from "./services/botwrapper";
 
 const main = async () => {
   const adapterFlow = createFlow([]);
-  const adapterProvider = createProvider(Provider);
+  const adapterProvider = createProvider(Provider, { writeMyself: "both" });
   const adapterDB = new Database();
 
   const BOT = await createBot({

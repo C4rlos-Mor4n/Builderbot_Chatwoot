@@ -236,7 +236,7 @@ export class BotWrapper {
 
     this.BotInstance.provider.on("message", (message: any) => {
       this.queueMessage.enqueue(async () => {
-        return await this.processIncomingMessage(message);
+        return await this.processMessage(message);
       });
     });
 
@@ -264,7 +264,30 @@ export class BotWrapper {
     return await this.Chatwoot.sendMessage(from, answer, "outgoing", false);
   }
 
-  static async processIncomingMessage(data: any) {
+  static async processMessage(data: any) {
+    if (data.key.fromMe) {
+      const { from, body, name } = await data;
+      if (body.includes("_event_")) {
+        return await this.Chatwoot.sendMessageAttachment(
+          from,
+          null,
+          [],
+          "outgoing",
+          true,
+          data,
+          `${from}`
+        );
+      }
+
+      return await this.Chatwoot.sendMessage(
+        from,
+        body,
+        "outgoing",
+        true,
+        `${from}`
+      );
+    }
+
     const { from, body, name } = await data;
     if (body.includes("_event_")) {
       return await this.Chatwoot.sendMessageAttachment(
@@ -274,7 +297,7 @@ export class BotWrapper {
         "incoming",
         false,
         data,
-        name
+        `${from}`
       );
     }
 
