@@ -116,7 +116,9 @@ export class BotWrapper {
       const { body } = req;
 
       // Early exit for a specific phone number
-      if (body?.conversation?.meta?.sender?.phone_number === "+593999999999") {
+      if (
+        body?.conversation?.meta?.sender?.phone_number === process.env.PHONE_QR
+      ) {
         return res.end("ok");
       }
 
@@ -210,7 +212,7 @@ export class BotWrapper {
         return;
       }
       return await this.Chatwoot.sendMessageAttachment(
-        "593999999999",
+        process.env.PHONE_QR,
         "Escanea el código QR para iniciar sesión",
         QrCode,
         "incoming",
@@ -226,7 +228,7 @@ export class BotWrapper {
       }
       await new Promise((resolve) => setTimeout(resolve, 3000));
       return await this.Chatwoot.sendMessage(
-        "593999999999",
+        process.env.PHONE_QR,
         `🔥EL CHATBOT ESTA LISTO PARA INTERACTUAR🔥`,
         "incoming",
         false,
